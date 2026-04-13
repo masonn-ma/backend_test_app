@@ -1,299 +1,757 @@
-/* User Management Wrapper */
-.user-management-wrapper {
-    padding: 40px 20px;
-    max-width: 1400px;
+/* ============================================================
+   custom.css — User Management
+   Overrides milligram.min + normalize.min
+   Matches Figma: white bg, dark navy thead, pill filters,
+   solid colored status badges, circular avatars, centered hero
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Global overrides (milligram resets) ──────────────────── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 14px;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: #ffffff;
+    color: #111827;
+    -webkit-font-smoothing: antialiased;
+    padding: 0;
+    /* milligram adds body padding */
+    margin: 0;
+}
+
+/* milligram sets a max-width container — let our wrapper handle it */
+.container {
+    max-width: 100%;
+    padding: 0;
+    width: 100%;
+}
+
+.main {
+    padding: 0 32px 64px;
+    max-width: 1300px;
     margin: 0 auto;
 }
 
-/* Header Section */
+/* ── Hero header (rendered in default.php layout) ─────────── */
 .management-header {
     text-align: center;
+    padding: 48px 32px 40px;
 }
 
 .management-header h1 {
-    font-size: 2.5rem;
+    font-family: 'Inter', sans-serif;
+    font-size: 48px;
     font-weight: 700;
-    color: #1a3a52;
-    margin-bottom: 10px;
+    color: #0f172a;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+    margin: 0 0 12px;
+    /* milligram overrides */
+    border: none;
+    padding: 0;
 }
 
-.management-header p {
-    font-size: 1.1rem;
-    color: #666;
-    max-width: 900px;
+.management-header .text-muted {
+    font-size: 15.5px;
+    color: #64748b;
+    max-width: 680px;
     margin: 0 auto;
+    line-height: 1.6;
+    font-weight: 400;
 }
 
-/* Filters & Actions Bar */
-.filters-bar {
+/* milligram's mb-5 utility — define it */
+.mb-5 {
+    margin-bottom: 0 !important;
+}
+
+/* spacing handled by padding above */
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.um-toolbar {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 20px;
+    justify-content: space-between;
+    gap: 12px;
     flex-wrap: wrap;
+    margin-bottom: 20px;
 }
 
-.search-filters {
+.um-filters {
     display: flex;
+    align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
     flex: 1;
-    min-width: 300px;
 }
 
-.search-input {
-    border-radius: 25px;
-    border: 1px solid #ddd;
-    padding: 10px 20px;
-    min-width: 250px;
+/* Search */
+.um-search-wrapper {
+    position: relative;
+    min-width: 200px;
+    max-width: 260px;
 }
 
-.search-input::placeholder {
-    color: #999;
+.um-search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 15px;
+    height: 15px;
+    color: #94a3b8;
+    pointer-events: none;
 }
 
-.search-input:focus {
-    border-color: #0066cc;
-    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+/* Override milligram input styles */
+.um-input,
+input.um-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 16px 0 38px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    color: #111827;
+    background: #ffffff;
+    border: 1.5px solid #d1d5db;
+    border-radius: 9999px;
+    outline: none;
+    box-shadow: none;
+    transition: border-color .15s, box-shadow .15s;
+    margin-bottom: 0;
+    /* milligram adds margin to inputs */
 }
 
-.filter-select {
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    padding: 8px 12px;
-    min-width: 120px;
-    background-color: white;
+.um-input::placeholder {
+    color: #9ca3af;
 }
 
-.filter-select:focus {
-    border-color: #0066cc;
-    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+.um-input:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
 }
 
-.action-buttons {
+/* Filter pill selects — override milligram select */
+.um-select,
+select.um-select {
+    height: 40px;
+    padding: 0 36px 0 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #374151;
+    background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 14px center;
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1.5px solid #d1d5db;
+    border-radius: 9999px;
+    outline: none;
+    cursor: pointer;
+    box-shadow: none;
+    transition: border-color .15s, box-shadow .15s;
+    margin-bottom: 0;
+    /* milligram */
+    display: inline-flex;
+    width: auto;
+    /* milligram sets select to 100% */
+}
+
+.um-select:hover {
+    border-color: #9ca3af;
+}
+
+.um-select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
+}
+
+.um-select-sm,
+select.um-select-sm {
+    height: 32px;
+    padding: 0 28px 0 10px;
+    font-size: 13px;
+    border-radius: 9999px;
+}
+
+/* Action buttons — override milligram button styles */
+.um-actions {
     display: flex;
     gap: 10px;
-    white-space: nowrap;
+    flex-shrink: 0;
 }
 
-.action-buttons .btn {
-    border-radius: 8px;
-    padding: 10px 20px;
+.um-btn,
+button.um-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 40px;
+    padding: 0 22px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
     font-weight: 500;
-}
-
-.action-buttons .btn-outline-secondary {
-    border: 1px solid #ddd;
-    color: #666;
-}
-
-.action-buttons .btn-outline-secondary:hover {
-    background-color: #f5f5f5;
-}
-
-.action-buttons .btn-primary {
-    background-color: #1a3a52;
-    border-color: #1a3a52;
-    color: white;
-}
-
-.action-buttons .btn-primary:hover {
-    background-color: #163048;
-    border-color: #163048;
-}
-
-/* Data Container */
-.data-container {
-    background-color: white;
-    overflow-x: auto;
-    max-height: 70vh;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.data-container table {
-    background-color: white;
-    margin-bottom: 0;
-}
-
-.data-container table thead {
-    position: sticky;
-    top: 0;
-    background-color: #f8f9fa;
-    z-index: 10;
-    border-bottom: 2px solid #e0e0e0;
-}
-
-.data-container table thead th {
-    color: #666;
-    font-weight: 600;
-    padding: 15px 12px;
-    font-size: 0.9rem;
-    white-space: nowrap;
-}
-
-.data-container table tbody tr {
-    background-color: white;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.data-container table tbody tr:hover {
-    background-color: #f9f9f9;
-}
-
-.data-container table tbody td {
-    padding: 15px 12px;
-    vertical-align: middle;
-    font-size: 0.95rem;
-}
-
-.data-container table tbody td strong {
-    color: #1a3a52;
-}
-
-/* Badges */
-.badge {
-    padding: 5px 10px;
-    border-radius: 12px;
-    font-size: 0.85rem;
-    font-weight: 500;
-}
-
-.badge-success {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.badge-danger {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-.badge-warning {
-    background-color: #fff3cd;
-    color: #856404;
-}
-
-.badge-info {
-    background-color: #d1ecf1;
-    color: #0c5460;
-}
-
-.badge-secondary {
-    background-color: #e2e3e5;
-    color: #383d41;
-}
-
-.badge-dark {
-    background-color: #d6d8db;
-    color: #1b1e21;
-}
-
-/* Checkboxes */
-.form-check-input {
-    width: 18px;
-    height: 18px;
+    border-radius: 9999px;
+    border: 1.5px solid transparent;
     cursor: pointer;
-}
-
-.form-check-input:checked {
-    background-color: #1a3a52;
-    border-color: #1a3a52;
-}
-
-/* Action Buttons in Table */
-.btn-link {
-    padding: 4px 6px;
+    white-space: nowrap;
+    letter-spacing: .01em;
+    transition: background .15s, border-color .15s, box-shadow .15s, color .15s;
+    margin-bottom: 0;
+    /* milligram */
     text-decoration: none;
-    color: #0066cc;
-    font-size: 1.2rem;
     line-height: 1;
 }
 
-.btn-link:hover {
-    color: #0052a3;
+.um-btn-ghost,
+button.um-btn-ghost {
+    background: #ffffff;
+    border-color: #d1d5db;
+    color: #374151;
 }
 
-.btn-link.text-danger:hover {
-    color: #d32f2f !important;
+.um-btn-ghost:hover,
+button.um-btn-ghost:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+    color: #374151;
 }
 
-/* Pagination */
-.pagination-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px;
-    border-top: 1px solid #e0e0e0;
-    background-color: #fafafa;
+.um-btn-primary,
+button.um-btn-primary {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+    font-weight: 600;
 }
 
-.rows-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.95rem;
-    color: #666;
+.um-btn-primary:hover,
+button.um-btn-primary:hover {
+    background: #0f172a;
+    border-color: #0f172a;
+    color: #ffffff;
 }
 
-.rows-info .form-select {
-    width: auto;
-    padding: 4px 8px;
-    font-size: 0.9rem;
+.um-btn-primary:active,
+button.um-btn-primary:active {
+    transform: translateY(1px);
 }
 
-.pagination {
+/* ── Table card ───────────────────────────────────────────── */
+.um-table-container {
+    border: 1.5px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    overflow-x: auto;
+    /* milligram may add margin to table wrappers */
+    margin: 0;
+}
+
+/* ── Table — override milligram table styles ──────────────── */
+.um-table,
+table.um-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+    font-size: 14px;
+    background: #ffffff;
+    /* milligram overrides */
+    display: table;
+    border-spacing: 0;
     margin-bottom: 0;
 }
 
-.pagination .page-link {
-    border: 1px solid #ddd;
-    color: #666;
-    padding: 6px 10px;
-    font-size: 0.9rem;
+/* thead: dark navy */
+.um-table thead,
+table.um-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
-.pagination .page-link:hover:not(.active) {
-    background-color: #f5f5f5;
-    color: #0066cc;
+.um-table thead tr,
+table.um-table thead tr {
+    background: #1e293b;
 }
 
-.pagination .page-item.active .page-link {
-    background-color: #1a3a52;
-    border-color: #1a3a52;
-    color: white;
+.um-table thead th,
+table.um-table thead th {
+    padding: 13px 16px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+    text-align: left;
+    letter-spacing: .01em;
+    border: none;
+    /* milligram adds borders to th */
+    background: transparent;
+    /* let tr handle bg */
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-    .filters-bar {
+/* Sort arrows on every sortable column */
+.um-table thead th:not(.col-check):not(.col-actions)::after {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 14px;
+    margin-left: 7px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='14' viewBox='0 0 10 14' fill='none'%3E%3Cpath d='M5 1v12' stroke='%2394a3b8' stroke-width='1.3' stroke-linecap='round'/%3E%3Cpath d='M1 4l4-3 4 3' stroke='%2394a3b8' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M1 10l4 3 4-3' stroke='%2394a3b8' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;
+    vertical-align: middle;
+    opacity: .8;
+}
+
+/* tbody rows */
+.um-table tbody tr,
+table.um-table tbody tr {
+    border-bottom: 1px solid #f3f4f6;
+    background: #ffffff;
+    transition: background .1s;
+}
+
+.um-table tbody tr:last-child,
+table.um-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.um-table tbody tr:hover,
+table.um-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.um-table tbody td,
+table.um-table tbody td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    color: #111827;
+    white-space: nowrap;
+    border: none;
+    /* milligram adds td borders */
+    font-size: 14px;
+    /* CRITICAL: never display:flex on td */
+    display: table-cell;
+}
+
+/* Column sizing */
+.col-check {
+    width: 48px;
+    text-align: center;
+    padding-left: 18px;
+    padding-right: 8px;
+}
+
+.col-actions {
+    width: 90px;
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 18px;
+}
+
+.um-table thead th.col-check,
+.um-table thead th.col-actions,
+.um-table tbody td.col-check,
+.um-table tbody td.col-actions {
+    text-align: center;
+}
+
+/* ── User cell ────────────────────────────────────────────── */
+.um-user-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.um-avatar {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+    border: 2px solid #f3f4f6;
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+/* Colour-cycle by first initial */
+.um-avatar[data-initial^="A"],
+.um-avatar[data-initial^="N"] {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.um-avatar[data-initial^="B"],
+.um-avatar[data-initial^="O"] {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
+.um-avatar[data-initial^="C"],
+.um-avatar[data-initial^="P"] {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.um-avatar[data-initial^="D"],
+.um-avatar[data-initial^="Q"] {
+    background: #fef9c3;
+    color: #92400e;
+}
+
+.um-avatar[data-initial^="E"],
+.um-avatar[data-initial^="R"] {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.um-avatar[data-initial^="F"],
+.um-avatar[data-initial^="S"] {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.um-avatar[data-initial^="G"],
+.um-avatar[data-initial^="T"] {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.um-avatar[data-initial^="H"],
+.um-avatar[data-initial^="U"] {
+    background: #fdf2f8;
+    color: #831843;
+}
+
+.um-avatar[data-initial^="I"],
+.um-avatar[data-initial^="V"] {
+    background: #f0fdf4;
+    color: #14532d;
+}
+
+.um-avatar[data-initial^="J"],
+.um-avatar[data-initial^="W"] {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.um-avatar[data-initial^="K"],
+.um-avatar[data-initial^="X"] {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.um-avatar[data-initial^="L"],
+.um-avatar[data-initial^="Y"] {
+    background: #f5f3ff;
+    color: #4c1d95;
+}
+
+.um-avatar[data-initial^="M"],
+.um-avatar[data-initial^="Z"] {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.um-username {
+    font-size: 14px;
+    font-weight: 500;
+    color: #111827;
+}
+
+.um-muted {
+    color: #6b7280;
+    font-size: 13.5px;
+}
+
+.um-code {
+    font-size: 13.5px;
+    color: #374151;
+}
+
+/* ── Status badges — solid pill ───────────────────────────── */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 14px;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    min-width: 84px;
+    letter-spacing: .01em;
+    line-height: 1.5;
+}
+
+.badge-success {
+    background: #22c55e;
+    color: #fff;
+}
+
+/* Active */
+.badge-pending {
+    background: #334155;
+    color: #fff;
+}
+
+/* Pending */
+.badge-secondary {
+    background: #94a3b8;
+    color: #fff;
+}
+
+/* Inactive / Disabled */
+.badge-danger {
+    background: #ef4444;
+    color: #fff;
+}
+
+/* Banned / Blocked */
+.badge-suspended {
+    background: #f97316;
+    color: #fff;
+}
+
+/* Suspended */
+
+/* Role badges — plain text, no pill background */
+.badge-admin,
+.badge-moderator,
+.badge-user {
+    background: transparent;
+    color: #111827;
+    font-weight: 400;
+    padding: 0;
+    min-width: auto;
+    font-size: 14px;
+    letter-spacing: 0;
+    border-radius: 0;
+}
+
+/* ── Checkboxes ───────────────────────────────────────────── */
+.um-checkbox,
+input.um-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    accent-color: #1e293b;
+    vertical-align: middle;
+    margin: 0;
+    /* milligram adds margins to inputs */
+}
+
+/* ── Row action buttons ───────────────────────────────────── */
+.um-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.um-icon-btn,
+button.um-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #9ca3af;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+}
+
+.um-icon-btn:hover,
+button.um-icon-btn:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.um-icon-btn-danger,
+button.um-icon-btn-danger {
+    color: #ef4444;
+}
+
+.um-icon-btn-danger:hover,
+button.um-icon-btn-danger:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* ── Empty state ──────────────────────────────────────────── */
+.um-empty {
+    text-align: center !important;
+    padding: 60px 0 !important;
+    color: #9ca3af;
+}
+
+.um-empty-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.um-empty-inner p {
+    font-size: 14px;
+    color: #9ca3af;
+    margin: 0;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.um-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+    padding: 0 2px;
+}
+
+.um-rows-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: #374151;
+}
+
+/* ── Pagination ───────────────────────────────────────────── */
+.um-pagination {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* override milligram .pagination if inherited */
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.um-page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 34px;
+    padding: 0 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 9999px;
+    background: #ffffff;
+    color: #374151;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+    user-select: none;
+    line-height: 1;
+}
+
+.um-page-btn:hover:not(.disabled):not(.active) {
+    background: #f9fafb;
+    border-color: #9ca3af;
+    color: #111827;
+    text-decoration: none;
+}
+
+.um-page-btn.active {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+    font-weight: 600;
+    cursor: default;
+}
+
+.um-page-btn.disabled {
+    opacity: .35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.um-page-ellipsis {
+    font-size: 13.5px;
+    color: #9ca3af;
+    padding: 0 4px;
+    line-height: 34px;
+}
+
+/* ── Milligram link color override for pagination ─────────── */
+.um-pagination a,
+.um-pagination a:visited {
+    color: #374151;
+    text-decoration: none;
+}
+
+.um-pagination a:hover {
+    color: #111827;
+    text-decoration: none;
+}
+
+.um-pagination a.active {
+    color: #ffffff;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .main {
+        padding: 0 16px 48px;
+    }
+
+    .management-header {
+        padding: 32px 16px 28px;
+    }
+
+    .management-header h1 {
+        font-size: 32px;
+    }
+
+    .um-toolbar {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .search-filters {
+    .um-filters {
         flex-direction: column;
     }
 
-    .action-buttons {
+    .um-search-wrapper {
+        max-width: 100%;
+    }
+
+    .um-actions {
         justify-content: stretch;
     }
 
-    .action-buttons .btn {
+    .um-actions .um-btn {
         flex: 1;
+        justify-content: center;
     }
 
-    .data-container {
-        max-height: 50vh;
-    }
-
-    .pagination-footer {
+    .um-footer {
         flex-direction: column;
-        gap: 20px;
         align-items: flex-start;
-    }
-
-    .management-header h1 {
-        font-size: 1.8rem;
     }
 }
