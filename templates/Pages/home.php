@@ -65,9 +65,40 @@ $totalRows = $mongoResult['totalCount'] ?? count($mongoResult['documents'] ?? []
 $currentPage = $mongoResult['page'] ?? 1;
 $perPage = $mongoResult['perPage'] ?? 10;
 $totalPages = $perPage > 0 ? (int)ceil($totalRows / $perPage) : 1;
+$startRow = $totalRows > 0 ? (($currentPage - 1) * $perPage) + 1 : 0;
+$endRow = $totalRows > 0 ? min($currentPage * $perPage, $totalRows) : 0;
+$queryParamsBase = ['perPage' => $perPage];
+if (!empty($searchQuery)) {
+    $queryParamsBase['q'] = $searchQuery;
+}
+$pageUrl = static function (int $pageNumber) use ($queryParamsBase): string {
+    return '?' . http_build_query($queryParamsBase + ['page' => $pageNumber]);
+};
 ?>
 
 <div class="um-wrap">
+    <?= $this->Form->create(null, [
+        'url' => ['controller' => 'Home', 'action' => 'deleteUsers'],
+        'id' => 'bulk-delete-form',
+        'class' => 'um-delete-form',
+    ]) ?>
+    <div id="bulk-delete-inputs"></div>
+    <?= $this->Form->end() ?>
+
+    <div class="um-confirm-backdrop hidden" id="delete-confirm-backdrop" aria-hidden="true"></div>
+    <div class="um-confirm-modal hidden" id="delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+        <div class="um-confirm-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="18" height="18">
+                <path d="M3 5h14M8 5V3h4v2M6 5l1 12h6l1-12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </div>
+        <h2 id="delete-confirm-title">Confirm deletion</h2>
+        <p id="delete-confirm-message">This action will delete the selected user(s). This cannot be undone.</p>
+        <div class="um-confirm-actions">
+            <button type="button" class="um-btn um-btn-ghost" id="delete-confirm-cancel">Cancel</button>
+            <button type="button" class="um-btn um-btn-danger" id="delete-confirm-approve">Delete</button>
+        </div>
+    </div>
 
     <!-- Filters & Actions Bar -->
     <div class="um-toolbar">
@@ -101,13 +132,13 @@ $totalPages = $perPage > 0 ? (int)ceil($totalRows / $perPage) : 1;
             </select>
         </div>
         <div class="um-actions">
-            <button class="um-btn um-btn-ghost">
+            <button type="button" class="um-btn um-btn-danger" id="bulk-delete-button" disabled>
                 <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="15" height="15">
-                    <path d="M3 10H17M3 5H17M3 15H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    <path d="M3 5h14M8 5V3h4v2M6 5l1 12h6l1-12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                Export
+                Delete
             </button>
-            <button class="um-btn um-btn-primary">
+            <button type="button" class="um-btn um-btn-primary" id="open-add-user">
                 <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="15" height="15">
                     <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
                 </svg>
@@ -150,6 +181,7 @@ $totalPages = $perPage > 0 ? (int)ceil($totalRows / $perPage) : 1;
                 <?php else: ?>
                     <?php foreach ($mongoResult['documents'] as $doc): ?>
                         <?php
+                        $userId = isset($doc['_id']) ? (string)$doc['_id'] : '';
                         $firstName  = trim((string)($doc['firstName'] ?? ''));
                         $lastName   = trim((string)($doc['lastName'] ?? ''));
                         $fullName   = trim("$firstName $lastName") ?: ($doc['username'] ?? 'N/A');
@@ -159,16 +191,14 @@ $totalPages = $perPage > 0 ? (int)ceil($totalRows / $perPage) : 1;
                         $email      = $doc['email'] ?? 'N/A';
                         $username   = $doc['username'] ?? 'N/A';
                         $status     = strtolower($doc['status'] ?? 'pending');
-                        // FIX: roles is an array — guard against non-array values
-                        $role       = is_array($doc['roles'] ?? null) ? ($doc['roles'][0] ?? 'guest') : 'guest';
-                        // FIX: guard against missing/null createdAt
+                        $role = strtolower((string)($doc['role'] ?? 'guest'));
                         $joinedDate = isset($doc['createdAt'])
                             ? $doc['createdAt']->toDateTime()->format('M j, Y')
                             : '—';
                         ?>
                         <tr>
                             <td class="col-check">
-                                <input type="checkbox" class="um-checkbox row-checkbox">
+                                <input type="checkbox" class="um-checkbox row-checkbox" value="<?= h($userId) ?>">
                             </td>
                             <td>
                                 <div class="um-user-cell">
@@ -186,16 +216,34 @@ $totalPages = $perPage > 0 ? (int)ceil($totalRows / $perPage) : 1;
                             <td class="um-muted"><?= $timeAgo($doc['lastLogin'] ?? null) ?></td>
                             <td class="col-actions">
                                 <div class="um-row-actions">
-                                    <button class="um-icon-btn" title="Edit user" aria-label="Edit <?= h($fullName) ?>">
+                                    <button
+                                        type="button"
+                                        class="um-icon-btn um-icon-btn-edit"
+                                        title="Edit user"
+                                        aria-label="Edit <?= h($fullName) ?>"
+                                        data-original-username="<?= h($username) ?>"
+                                        data-first-name="<?= h($firstName) ?>"
+                                        data-last-name="<?= h($lastName) ?>"
+                                        data-email="<?= h($email) ?>"
+                                        data-username="<?= h($username) ?>"
+                                        data-role="<?= h($role) ?>"
+                                        data-status="<?= h($status) ?>">
                                         <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="15" height="15">
                                             <path d="M14.5 2.5a2.121 2.121 0 0 1 3 3L6 17H3v-3L14.5 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
                                         </svg>
                                     </button>
-                                    <button class="um-icon-btn um-icon-btn-danger" title="Delete user" aria-label="Delete <?= h($fullName) ?>">
+                                    <?= $this->Form->create(null, [
+                                        'url' => ['controller' => 'Home', 'action' => 'deleteUsers'],
+                                        'class' => 'um-inline-form',
+                                        'data-delete-form' => 'single',
+                                    ]) ?>
+                                    <input type="hidden" name="userIds[]" value="<?= h($userId) ?>">
+                                    <button type="button" class="um-icon-btn um-icon-btn-danger js-delete-trigger" title="Delete user" aria-label="Delete <?= h($fullName) ?>">
                                         <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="15" height="15">
                                             <path d="M3 5h14M8 5V3h4v2M6 5l1 12h6l1-12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                                         </svg>
                                     </button>
+                                    <?= $this->Form->end() ?>
                                 </div>
                             </td>
                         </tr>
@@ -209,40 +257,46 @@ $totalPages = $perPage > 0 ? (int)ceil($totalRows / $perPage) : 1;
     <!-- FIX: Use real pagination data instead of hardcoded values -->
     <div class="um-footer">
         <div class="um-rows-info">
-            Rows per page:
-            <select class="um-select um-select-sm">
-                <option <?= $perPage === 10 ? 'selected' : '' ?>>10</option>
-                <option <?= $perPage === 25 ? 'selected' : '' ?>>25</option>
-                <option <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
-            </select>
+            <form method="get" action="" class="um-rows-form">
+                <?php if (!empty($searchQuery)): ?>
+                    <input type="hidden" name="q" value="<?= h($searchQuery) ?>">
+                <?php endif; ?>
+                <input type="hidden" name="page" value="1">
+                Rows per page:
+                <select class="um-select um-select-sm" name="perPage" onchange="this.form.submit()">
+                    <option value="10" <?= $perPage === 10 ? 'selected' : '' ?>>10</option>
+                    <option value="25" <?= $perPage === 25 ? 'selected' : '' ?>>25</option>
+                    <option value="50" <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
+                </select>
+            </form>
             <span class="um-muted">
-                <?= (($currentPage - 1) * $perPage) + 1 ?>–<?= min($currentPage * $perPage, $totalRows) ?> of <?= $totalRows ?>
+                <?= $startRow ?>–<?= $endRow ?> of <?= $totalRows ?>
             </span>
         </div>
         <nav class="um-pagination" aria-label="Page navigation">
-            <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="?page=1" aria-label="First page">«</a>
-            <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="?page=<?= max(1, $currentPage - 1) ?>" aria-label="Previous page">‹</a>
+            <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(1) ?>" aria-label="First page">«</a>
+            <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(max(1, $currentPage - 1)) ?>" aria-label="Previous page">‹</a>
 
             <?php
             $window = 2;
             $start = max(1, $currentPage - $window);
             $end = min($totalPages, $currentPage + $window);
             if ($start > 1): ?>
-                <a class="um-page-btn" href="?page=1">1</a>
+                <a class="um-page-btn" href="<?= $pageUrl(1) ?>">1</a>
                 <?php if ($start > 2): ?><span class="um-page-ellipsis">…</span><?php endif; ?>
             <?php endif; ?>
 
             <?php for ($p = $start; $p <= $end; $p++): ?>
-                <a class="um-page-btn <?= $p === $currentPage ? 'active' : '' ?>" href="?page=<?= $p ?>"><?= $p ?></a>
+                <a class="um-page-btn <?= $p === $currentPage ? 'active' : '' ?>" href="<?= $pageUrl($p) ?>"><?= $p ?></a>
             <?php endfor; ?>
 
             <?php if ($end < $totalPages): ?>
                 <?php if ($end < $totalPages - 1): ?><span class="um-page-ellipsis">…</span><?php endif; ?>
-                <a class="um-page-btn" href="?page=<?= $totalPages ?>"><?= $totalPages ?></a>
+                <a class="um-page-btn" href="<?= $pageUrl($totalPages) ?>"><?= $totalPages ?></a>
             <?php endif; ?>
 
-            <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="?page=<?= min($totalPages, $currentPage + 1) ?>" aria-label="Next page">›</a>
-            <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="?page=<?= $totalPages ?>" aria-label="Last page">»</a>
+            <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl(min($totalPages, $currentPage + 1)) ?>" aria-label="Next page">›</a>
+            <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl($totalPages) ?>" aria-label="Last page">»</a>
         </nav>
     </div>
 </div>

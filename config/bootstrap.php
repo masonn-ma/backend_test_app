@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 /**
@@ -50,7 +51,10 @@ use function Cake\Core\env;
 /*
  * Load global functions for collections, translations, debugging etc.
  */
+
 require CAKE . 'functions.php';
+
+require dirname(__DIR__) . '/src/MongoStubs.php';
 
 /*
  * See https://github.com/josegonzalez/php-dotenv for API details.

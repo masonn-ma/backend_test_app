@@ -34,7 +34,58 @@ class MongoService
 
     public function getConfiguredCollectionDocuments(): array
     {
-        return $this->collection()->find()->toArray();
+        $collection = $this->collection();
+        $filter = $this->buildReadFilter($this->collectionName);
+
+        return $collection->find($filter)->toArray();
+    }
+
+    /**
+     * Fetch paginated documents from the configured collection.
+     *
+     * @return array{documents: array<mixed>, totalCount: int, page: int, perPage: int}
+     */
+    public function getConfiguredCollectionPage(int $page, int $perPage): array
+    {
+        $page = max(1, $page);
+        $perPage = max(1, $perPage);
+        $skip = ($page - 1) * $perPage;
+        $collection = $this->collection();
+        $filter = $this->buildReadFilter($this->collectionName);
+
+        $documents = $collection
+            ->find($filter, [
+                'sort' => ['createdAt' => -1, '_id' => -1],
+                'skip' => $skip,
+                'limit' => $perPage,
+            ])
+            ->toArray();
+
+        $totalCount = (int)$collection->countDocuments($filter);
+
+        return [
+            'documents' => $documents,
+            'totalCount' => $totalCount,
+            'page' => $page,
+            'perPage' => $perPage,
+        ];
+    }
+
+    /* ---------------- USER ACTIONS ---------------- */
+    public function newUser(array $userData): string
+    {
+        $result = $this->collection('users')->insertOne($userData);
+        return (string)$result->getInsertedId();
+    }
+
+    public function deleteUsers(array $userIds): bool
+    {
+        // Soft delete: set isActive to false instead of removing the document
+        $result = $this->collection('users')->updateMany(
+            ['_id' => ['$in' => array_map(static fn($id) => new \MongoDB\BSON\ObjectId($id), $userIds)]],
+            ['$set' => ['isActive' => false]]
+        );
+        return $result->getModifiedCount() > 0;
     }
 
     /**
@@ -57,5 +108,27 @@ class MongoService
         return $this->auditCollection()
             ->find([], ['sort' => ['timestamp' => -1]])
             ->toArray();
+    }
+
+    /**
+     * Build a read filter for collection queries.
+     *
+     * Only the users collection is filtered by isActive so other collections,
+     * such as activity logs, keep their full result sets.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildReadFilter(string $collectionName): array
+    {
+        if ($collectionName !== 'users') {
+            return [];
+        }
+
+        return [
+            '$or' => [
+                ['isActive' => ['$exists' => false]],
+                ['isActive' => ['$ne' => false]],
+            ],
+        ];
     }
 }

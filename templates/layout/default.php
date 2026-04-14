@@ -24,7 +24,8 @@ $cakeDescription = 'CakePHP: the rapid development php framework';
     <?= $this->Html->charset() ?>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <?= $this->Html->css(['normalize.min', 'milligram.min', 'fonts', 'custom']) ?>
+    <?= $this->Html->css(['normalize.min', 'milligram.min', 'fonts', 'custom', 'modal']) ?>
+    <?= $this->Html->script(['home', 'add-user-modal', 'edit-user-modal']) ?>
 
     <?= $this->fetch('meta') ?>
     <?= $this->fetch('css') ?>
@@ -35,13 +36,13 @@ $cakeDescription = 'CakePHP: the rapid development php framework';
     <main class="main">
         <div class="management-header mb-5">
             <h1>User Management</h1>
-            <p class="text-muted">Manage all users in one place. Control access, assign roles, and monitor activity across your platform.</p>
-        </div>
-        <div class="container">
-            <?= $this->Flash->render() ?>
-            <?= $this->fetch('content') ?>
-        </div>
+            <div class="container">
+                <?= $this->Flash->render() ?>
+                <?= $this->fetch('content') ?>
+            </div>
     </main>
+    <?= $this->element('add_user_modal') ?>
+    <?= $this->element('edit_user_modal') ?>
     <footer>
     </footer>
 </body>

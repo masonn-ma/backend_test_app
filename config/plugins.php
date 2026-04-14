@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin configuration.
  *
@@ -19,7 +20,7 @@
  * @license       https://opensource.org/licenses/mit-license.php MIT License
  */
 
- /*
+/*
   * List of plugins to load in the form `PluginName` => `[configuration options]`.
   *
   * Available options:
@@ -28,7 +29,7 @@
   * - optional: Do not throw an exception if the plugin is not found. Default false.
   */
 return [
-    'DebugKit' => ['onlyDebug' => true],
+    // 'DebugKit' => ['onlyDebug' => true],
     'Bake' => ['onlyCli' => true, 'optional' => true],
     'Migrations' => ['onlyCli' => true],
 

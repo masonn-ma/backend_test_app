@@ -28,6 +28,49 @@ body {
     margin: 0;
 }
 
+/* Flash messages used for in-page prompts */
+.message {
+    padding: .85rem 1rem;
+    background: #eff6ff;
+    color: #1e3a8a;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    margin: 0 0 16px;
+    cursor: pointer;
+    font-size: 13.5px;
+    line-height: 1.4;
+}
+
+.message.hidden {
+    display: none;
+}
+
+.message.warning {
+    background: #fff7ed;
+    color: #9a3412;
+    border-color: #fed7aa;
+}
+
+.message.error {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+.message.success {
+    background: #ecfdf5;
+    color: #065f46;
+    border-color: #a7f3d0;
+}
+
+body.um-modal-open {
+    overflow: hidden;
+}
+
+.hidden {
+    display: none !important;
+}
+
 /* milligram sets a max-width container — let our wrapper handle it */
 .container {
     max-width: 100%;
@@ -54,8 +97,7 @@ body {
     color: #0f172a;
     letter-spacing: -.02em;
     line-height: 1.15;
-    margin: 0 0 12px;
-    /* milligram overrides */
+    margin: 0 0 36px;
     border: none;
     padding: 0;
 }
@@ -243,6 +285,30 @@ button.um-btn-primary:hover {
 .um-btn-primary:active,
 button.um-btn-primary:active {
     transform: translateY(1px);
+}
+
+.um-btn-danger,
+button.um-btn-danger {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.um-btn-danger:hover,
+button.um-btn-danger:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+    color: #ffffff;
+}
+
+.um-btn-danger:disabled,
+button.um-btn-danger:disabled {
+    background: #fca5a5;
+    border-color: #fca5a5;
+    color: #ffffff;
+    cursor: not-allowed;
+    opacity: .7;
 }
 
 /* ── Table card ───────────────────────────────────────────── */
@@ -529,18 +595,24 @@ table.um-table tbody td {
 
 /* Suspended */
 
-/* Role badges — plain text, no pill background */
+/* Role badges — distinct pill styles */
 .badge-admin,
 .badge-moderator,
 .badge-user {
-    background: transparent;
-    color: #111827;
-    font-weight: 400;
-    padding: 0;
-    min-width: auto;
-    font-size: 14px;
-    letter-spacing: 0;
-    border-radius: 0;
+    color: #fff;
+    width: auto;
+}
+
+.badge-admin {
+    background: #ef4444;
+}
+
+.badge-moderator {
+    background: #0054daac;
+}
+
+.badge-user {
+    background: #22c55e;
 }
 
 /* ── Checkboxes ───────────────────────────────────────────── */
@@ -562,6 +634,71 @@ input.um-checkbox {
     align-items: center;
     justify-content: center;
     gap: 4px;
+}
+
+.um-inline-form,
+form.um-inline-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.um-delete-form,
+form.um-delete-form {
+    display: none;
+}
+
+.um-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .52);
+    z-index: 1200;
+}
+
+.um-confirm-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 420px);
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
+    padding: 26px 24px 22px;
+    z-index: 1201;
+    text-align: center;
+}
+
+.um-confirm-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 9999px;
+    background: #fef2f2;
+    color: #dc2626;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+}
+
+.um-confirm-modal h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    line-height: 1.2;
+    color: #0f172a;
+}
+
+.um-confirm-modal p {
+    margin: 0;
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.um-confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 22px;
 }
 
 .um-icon-btn,
@@ -636,6 +773,18 @@ button.um-icon-btn-danger:hover {
     gap: 8px;
     font-size: 13.5px;
     color: #374151;
+}
+
+.um-rows-form,
+form.um-rows-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.um-rows-form .um-select {
+    margin: 0;
 }
 
 /* ── Pagination ───────────────────────────────────────────── */
