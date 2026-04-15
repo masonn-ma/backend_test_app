@@ -81,6 +81,7 @@ class HomeController extends AppController
         ];
         try {
             $mongo = new MongoService();
+            $es = new ElasticsearchService();
             $firstName = trim((string)$this->request->getData('firstName'));
             $lastName = trim((string)$this->request->getData('lastName'));
             $email = trim((string)$this->request->getData('email'));
@@ -145,7 +146,18 @@ class HomeController extends AppController
                 ],
                 'twoFactorEnabled' => false,
             ];
-            $mongo->newUser($newUserData);
+            $insertedId = $mongo->newUser($newUserData);
+
+            // Keep ES sync as best-effort so Mongo remains source of truth.
+            try {
+                $es->indexDocument($newUserData, $insertedId);
+            } catch (\Throwable $syncException) {
+                trigger_error(
+                    sprintf('Elasticsearch user sync failed on create: %s', $syncException->getMessage()),
+                    E_USER_WARNING
+                );
+            }
+
             $payload['success'] = true;
         } catch (\MongoDB\Driver\Exception\BulkWriteException $exception) {
             $writeErrors = $exception->getWriteResult()->getWriteErrors();
@@ -188,6 +200,7 @@ class HomeController extends AppController
 
         try {
             $mongo = new MongoService();
+            $es = new ElasticsearchService();
             $originalUsername = trim((string)$this->request->getData('originalUsername'));
             $firstName = trim((string)$this->request->getData('firstName'));
             $lastName = trim((string)$this->request->getData('lastName'));
@@ -228,6 +241,25 @@ class HomeController extends AppController
             if ($updateResult->getMatchedCount() === 0) {
                 $payload['error'] = 'User not found.';
             } else {
+                $updatedUser = $mongo->collection('users')->findOne(
+                    ['username' => $username],
+                    ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']]
+                );
+
+                if (is_array($updatedUser) && isset($updatedUser['_id'])) {
+                    $esId = (string)$updatedUser['_id'];
+                    unset($updatedUser['_id']);
+
+                    try {
+                        $es->indexDocument($updatedUser, $esId);
+                    } catch (\Throwable $syncException) {
+                        trigger_error(
+                            sprintf('Elasticsearch user sync failed on update: %s', $syncException->getMessage()),
+                            E_USER_WARNING
+                        );
+                    }
+                }
+
                 $payload['success'] = true;
             }
         } catch (\Throwable $exception) {
@@ -268,6 +300,7 @@ class HomeController extends AppController
 
         try {
             $mongo = new MongoService();
+            $es = new ElasticsearchService();
             $userIds = $this->request->getData('userIds', []);
             if (!is_array($userIds) || empty($userIds)) {
                 throw new \RuntimeException('No user IDs provided for deletion.');
@@ -275,6 +308,17 @@ class HomeController extends AppController
 
             $deletionSuccess = $mongo->deleteUsers($userIds);
             if ($deletionSuccess) {
+                foreach ($userIds as $userId) {
+                    try {
+                        $es->deleteDocument((string)$userId);
+                    } catch (\Throwable $syncException) {
+                        trigger_error(
+                            sprintf('Elasticsearch user sync failed on delete: %s', $syncException->getMessage()),
+                            E_USER_WARNING
+                        );
+                    }
+                }
+
                 $payload['success'] = true;
             } else {
                 $payload['error'] = 'No users were deleted. Please check the provided user IDs.';

@@ -7,6 +7,8 @@ namespace App\Service;
 use Cake\Core\Configure;
 use Elastic\Elasticsearch\Client;
 use Elastic\Elasticsearch\ClientBuilder;
+use MongoDB\BSON\ObjectId;
+use MongoDB\BSON\UTCDateTime;
 use RuntimeException;
 
 class ElasticsearchService
@@ -34,11 +36,12 @@ class ElasticsearchService
         return $this->indexName;
     }
 
+
     public function indexDocument(array $document, ?string $id = null): void
     {
         $params = [
             'index' => $this->indexName,
-            'body' => $document,
+            'body' => $this->normalizeDocument($document),
         ];
 
         if ($id !== null && $id !== '') {
@@ -46,6 +49,25 @@ class ElasticsearchService
         }
 
         $this->client->index($params);
+    }
+
+    public function deleteDocument(string $id): void
+    {
+        if ($id === '') {
+            return;
+        }
+
+        try {
+            $this->client->delete([
+                'index' => $this->indexName,
+                'id' => $id,
+            ]);
+        } catch (\Throwable $exception) {
+            // Ignore missing documents so delete sync is idempotent.
+            if ((int)$exception->getCode() !== 404) {
+                throw $exception;
+            }
+        }
     }
 
     public function search(string $query): array
@@ -71,5 +93,50 @@ class ElasticsearchService
         $hits = $response['hits']['hits'] ?? [];
 
         return is_array($hits) ? $hits : [];
+    }
+
+    /**
+     * @param mixed $value
+     * @return mixed
+     */
+    private function normalizeValue(mixed $value): mixed
+    {
+        if ($value instanceof UTCDateTime) {
+            return $value->toDateTime()->format(DATE_ATOM);
+        }
+
+        if ($value instanceof ObjectId) {
+            return (string)$value;
+        }
+
+        if (is_array($value)) {
+            $normalized = [];
+            foreach ($value as $key => $item) {
+                $normalized[$key] = $this->normalizeValue($item);
+            }
+
+            return $normalized;
+        }
+
+        if (is_object($value)) {
+            // BSON documents can be converted by reusing json serialization output.
+            $decoded = json_decode((string)json_encode($value), true);
+            if (is_array($decoded)) {
+                return $this->normalizeValue($decoded);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param array<string, mixed> $document
+     * @return array<string, mixed>
+     */
+    private function normalizeDocument(array $document): array
+    {
+        $normalized = $this->normalizeValue($document);
+
+        return is_array($normalized) ? $normalized : [];
     }
 }
