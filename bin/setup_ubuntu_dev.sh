@@ -35,18 +35,42 @@ else
   echo "[3/8] Docker group membership already configured."
 fi
 
+COMPOSER_CMD="composer"
+
 if ! command -v composer >/dev/null 2>&1; then
   echo "[4/8] Installing Composer..."
   php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-  php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+  if [[ -w /usr/local/bin ]]; then
+    php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+  else
+    if command -v sudo >/dev/null 2>&1; then
+      sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+    else
+      mkdir -p "$HOME/.local/bin"
+      php composer-setup.php --install-dir="$HOME/.local/bin" --filename=composer
+      export PATH="$HOME/.local/bin:$PATH"
+      COMPOSER_CMD="$HOME/.local/bin/composer"
+      echo "Composer installed to $HOME/.local/bin/composer"
+    fi
+  fi
   rm -f composer-setup.php
 else
   echo "[4/8] Composer already installed."
 fi
 
+if command -v composer >/dev/null 2>&1; then
+  COMPOSER_CMD="composer"
+elif [[ -x "$HOME/.local/bin/composer" ]]; then
+  COMPOSER_CMD="$HOME/.local/bin/composer"
+  export PATH="$HOME/.local/bin:$PATH"
+else
+  echo "Composer installation failed."
+  exit 1
+fi
+
 echo "[5/8] Installing PHP dependencies..."
 cd "$PROJECT_DIR"
-composer install
+"$COMPOSER_CMD" install
 
 echo "[6/8] Preparing app local config..."
 if [[ ! -f "$PROJECT_DIR/config/app_local.php" ]]; then
