@@ -6,7 +6,6 @@ namespace App\Controller;
 
 use App\Service\ElasticsearchService;
 use App\Service\MongoService;
-use MongoDB\BSON\UTCDateTime;
 use Cake\Http\Response;
 
 class HomeController extends AppController
@@ -16,7 +15,12 @@ class HomeController extends AppController
         $query = trim((string)$this->request->getQuery('q', ''));
         $page = max(1, (int)$this->request->getQuery('page', 1));
         $perPage = $this->normalizePerPage((int)$this->request->getQuery('perPage', 10));
-        $this->set($this->buildHomeViewData($query, $page, $perPage));
+        $roleFilter = strtolower(trim((string)$this->request->getQuery('role', '')));
+        $statusFilter = strtolower(trim((string)$this->request->getQuery('status', '')));
+        $activeOnly = $this->normalizeActiveOnly($this->request->getQuery('activeOnly', '1'));
+        $sortBy = $this->normalizeSortBy((string)$this->request->getQuery('sortBy', ''));
+        $sortDir = $this->normalizeSortDir((string)$this->request->getQuery('sortDir', ''));
+        $this->set($this->buildHomeViewData($query, $page, $perPage, $roleFilter, $statusFilter, $activeOnly, $sortBy, $sortDir));
 
         return $this->render('/Pages/home');
     }
@@ -27,7 +31,12 @@ class HomeController extends AppController
         $query = trim((string)$this->request->getQuery('q', ''));
         $page = max(1, (int)$this->request->getQuery('page', 1));
         $perPage = $this->normalizePerPage((int)$this->request->getQuery('perPage', 10));
-        $viewData = $this->buildHomeViewData($query, $page, $perPage);
+        $roleFilter = strtolower(trim((string)$this->request->getQuery('role', '')));
+        $statusFilter = strtolower(trim((string)$this->request->getQuery('status', '')));
+        $activeOnly = $this->normalizeActiveOnly($this->request->getQuery('activeOnly', '1'));
+        $sortBy = $this->normalizeSortBy((string)$this->request->getQuery('sortBy', ''));
+        $sortDir = $this->normalizeSortDir((string)$this->request->getQuery('sortDir', ''));
+        $viewData = $this->buildHomeViewData($query, $page, $perPage, $roleFilter, $statusFilter, $activeOnly, $sortBy, $sortDir);
         $isAjax = (string)$this->request->getQuery('ajax', '') === '1';
 
         if ($isAjax) {
@@ -90,67 +99,27 @@ class HomeController extends AppController
             $role = strtolower(trim((string)$this->request->getData('role', 'user')));
             $status = strtolower(trim((string)$this->request->getData('status', 'active')));
             $isActive = true;
-            $permissionsByRole = [
-                'admin' => ['read', 'write', 'moderate', 'delete', 'admin'],
-                'moderator' => ['read', 'write', 'moderate'],
-                'user' => ['read', 'write'],
-                'guest' => ['read'],
-            ];
-            $permissions = $permissionsByRole[$role] ?? ['read'];
-            $now = new UTCDateTime();
-            $defaultDob = new UTCDateTime((int)(strtotime('2000-01-01T00:00:00Z') * 1000));
 
             $newUserData = [
-                'username' => $username,
-                'email' => $email,
-                'passwordHash' => password_hash($password, PASSWORD_DEFAULT),
                 'firstName' => $firstName,
                 'lastName' => $lastName,
-                'fullName' => trim($firstName . ' ' . $lastName),
-                'age' => 18,
-                'dateOfBirth' => $defaultDob,
-                'gender' => 'prefer not to say',
-                'phoneNumber' => '+10000000000',
-                'address' => [
-                    'street' => 'Unknown',
-                    'city' => 'Unknown',
-                    'state' => 'Unknown',
-                    'postalCode' => '00000',
-                    'country' => 'Unknown',
-                ],
-                'profilePicture' => '',
-                'bio' => '',
+                'email' => $email,
+                'username' => $username,
+                'password' => $password,
                 'role' => $role,
                 'status' => $status,
-                'permissions' => $permissions,
                 'isActive' => $isActive,
-                'isEmailVerified' => false,
-                'isPhoneVerified' => false,
-                'lastLogin' => $now,
-                'loginCount' => 0,
-                'createdAt' => $now,
-                'updatedAt' => $now,
-                'socialLogin' => [
-                    'google' => null,
-                    'facebook' => null,
-                    'twitter' => null,
-                ],
-                'preferences' => [
-                    'language' => 'en',
-                    'theme' => 'system',
-                    'notifications' => [
-                        'email' => true,
-                        'push' => true,
-                        'sms' => false,
-                    ],
-                ],
-                'twoFactorEnabled' => false,
             ];
+
             $insertedId = $mongo->newUser($newUserData);
 
             // Keep ES sync as best-effort so Mongo remains source of truth.
             try {
-                $es->indexDocument($newUserData, $insertedId);
+                $createdUser = $mongo->findUserByUsername($username);
+                if (is_array($createdUser)) {
+                    unset($createdUser['_id']);
+                    $es->indexDocument($createdUser, $insertedId);
+                }
             } catch (\Throwable $syncException) {
                 trigger_error(
                     sprintf('Elasticsearch user sync failed on create: %s', $syncException->getMessage()),
@@ -213,38 +182,20 @@ class HomeController extends AppController
                 throw new \RuntimeException('Missing original username for update.');
             }
 
-            $permissionsByRole = [
-                'admin' => ['read', 'write', 'moderate', 'delete', 'admin'],
-                'moderator' => ['read', 'write', 'moderate'],
-                'user' => ['read', 'write'],
-                'guest' => ['read'],
-            ];
-            $permissions = $permissionsByRole[$role] ?? ['read'];
-
-            $updateResult = $mongo->collection('users')->updateOne(
-                ['username' => $originalUsername],
-                [
-                    '$set' => [
-                        'username' => $username,
-                        'email' => $email,
-                        'firstName' => $firstName,
-                        'lastName' => $lastName,
-                        'fullName' => trim($firstName . ' ' . $lastName),
-                        'role' => $role,
-                        'permissions' => $permissions,
-                        'status' => $status,
-                        'updatedAt' => new UTCDateTime(),
-                    ],
-                ]
+            $updated = $mongo->updateUserProfileByUsername(
+                $originalUsername,
+                $username,
+                $email,
+                $firstName,
+                $lastName,
+                $role,
+                $status
             );
 
-            if ($updateResult->getMatchedCount() === 0) {
+            if (!$updated) {
                 $payload['error'] = 'User not found.';
             } else {
-                $updatedUser = $mongo->collection('users')->findOne(
-                    ['username' => $username],
-                    ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']]
-                );
+                $updatedUser = $mongo->findUserByUsername($username);
 
                 if (is_array($updatedUser) && isset($updatedUser['_id'])) {
                     $esId = (string)$updatedUser['_id'];
@@ -343,8 +294,16 @@ class HomeController extends AppController
     }
 
     // Helper method to build view data for the home page
-    private function buildHomeViewData(string $query, int $page = 1, int $perPage = 10): array
-    {
+    private function buildHomeViewData(
+        string $query,
+        int $page = 1,
+        int $perPage = 10,
+        string $role = '',
+        string $status = '',
+        bool $activeOnly = false,
+        string $sortBy = '',
+        string $sortDir = ''
+    ): array {
         $mongoResult = [
             'connected' => false,
             'error' => null,
@@ -358,7 +317,7 @@ class HomeController extends AppController
 
         try {
             $mongo = new MongoService();
-            $pageData = $mongo->getConfiguredCollectionPage($page, $perPage);
+            $pageData = $mongo->getConfiguredCollectionPage($page, $perPage, $activeOnly, $role, $status, $sortBy, $sortDir);
             $mongoResult['connected'] = true;
             $mongoResult['collectionName'] = $mongo->configuredCollectionName();
             $mongoResult['documents'] = $pageData['documents'];
@@ -373,12 +332,48 @@ class HomeController extends AppController
         $searchError = null;
         $searchErrorCode = null;
         $searchIndexName = null;
+        $searchDocuments = [];
+        $searchSucceed = false;
 
         if ($query !== '') {
             try {
                 $es = new ElasticsearchService();
                 $searchIndexName = $es->configuredIndexName();
-                $searchResults = $es->search($query);
+                $searchResults = $es->search($query, $role, $status);
+                $searchDocuments = array_values(array_filter(array_map(
+                    static function (array $hit): ?array {
+                        $source = $hit['_source'] ?? null;
+
+                        if (!is_array($source)) {
+                            return null;
+                        }
+
+                        if (isset($hit['_id'])) {
+                            $source['_id'] = $hit['_id'];
+                        }
+
+                        return $source;
+                    },
+                    $searchResults
+                )));
+
+                if ($activeOnly) {
+                    $searchDocuments = array_values(array_filter(
+                        $searchDocuments,
+                        static fn(array $document): bool => (bool)($document['isActive'] ?? false) === true
+                    ));
+                }
+
+                if ($sortBy !== '' && $sortDir !== '') {
+                    $searchDocuments = $this->sortDocuments($searchDocuments, $sortBy, $sortDir);
+                }
+
+                $mongoResult['documents'] = $searchDocuments;
+                $mongoResult['totalCount'] = count($searchDocuments);
+                $mongoResult['page'] = 1;
+                $mongoResult['perPage'] = max(1, count($searchDocuments));
+
+                $searchSucceed = true;
             } catch (\Throwable $exception) {
                 $exceptionCode = (int)$exception->getCode();
                 if ($exceptionCode === 404) {
@@ -391,13 +386,34 @@ class HomeController extends AppController
             }
         }
 
+        if ($searchSucceed) {
+            $this->Flash->success(sprintf(
+                'Search completed successfully. Found %d result%s for "%s".',
+                count($searchDocuments),
+                count($searchDocuments) === 1 ? '' : 's',
+                $query
+            ));
+        } else if ($query !== '') {
+            $this->Flash->error(sprintf(
+                'Search failed for "%s". %s',
+                $query,
+                $searchError ?? 'An unknown error occurred.'
+            ));
+        }
+
         return [
             'mongoResult' => $mongoResult,
             'searchQuery' => $query,
             'searchResults' => $searchResults,
+            'searchDocuments' => $searchDocuments,
             'searchError' => $searchError,
             'searchErrorCode' => $searchErrorCode,
             'searchIndexName' => $searchIndexName,
+            'activeOnly' => $activeOnly,
+            'roleFilter' => $role,
+            'statusFilter' => $status,
+            'sortBy' => $sortBy,
+            'sortDir' => $sortDir,
         ];
     }
 
@@ -406,5 +422,84 @@ class HomeController extends AppController
         $allowed = [10, 25, 50];
 
         return in_array($perPage, $allowed, true) ? $perPage : 10;
+    }
+
+    private function normalizeActiveOnly(mixed $value): bool
+    {
+        return !in_array((string)$value, ['0', 'false', 'off', 'no'], true);
+    }
+
+    private function normalizeSortBy(string $sortBy): string
+    {
+        $allowed = ['name', 'email', 'username', 'status', 'role', 'joined', 'lastActive'];
+
+        return in_array($sortBy, $allowed, true) ? $sortBy : '';
+    }
+
+    private function normalizeSortDir(string $sortDir): string
+    {
+        $normalized = strtolower($sortDir);
+
+        if ($normalized === 'asc' || $normalized === 'desc') {
+            return $normalized;
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $documents
+     * @return array<int, array<string, mixed>>
+     */
+    private function sortDocuments(array $documents, string $sortBy, string $sortDir): array
+    {
+        if ($sortBy === '' || $sortDir === '') {
+            return $documents;
+        }
+
+        $fieldMap = [
+            'name' => 'fullName',
+            'email' => 'email',
+            'username' => 'username',
+            'status' => 'status',
+            'role' => 'role',
+            'joined' => 'createdAt',
+            'lastActive' => 'lastLogin',
+        ];
+
+        $field = $fieldMap[$sortBy] ?? 'createdAt';
+
+        usort($documents, static function (array $left, array $right) use ($field, $sortDir): int {
+            $leftValue = $left[$field] ?? null;
+            $rightValue = $right[$field] ?? null;
+
+            if ($leftValue instanceof \MongoDB\BSON\UTCDateTime) {
+                $leftValue = $leftValue->toDateTime()->getTimestamp();
+            }
+            if ($rightValue instanceof \MongoDB\BSON\UTCDateTime) {
+                $rightValue = $rightValue->toDateTime()->getTimestamp();
+            }
+
+            if ($field === 'createdAt' || $field === 'lastLogin') {
+                if (is_string($leftValue)) {
+                    $leftValue = strtotime($leftValue) ?: 0;
+                }
+                if (is_string($rightValue)) {
+                    $rightValue = strtotime($rightValue) ?: 0;
+                }
+            }
+
+            if (is_numeric($leftValue) && is_numeric($rightValue)) {
+                $comparison = (float)$leftValue <=> (float)$rightValue;
+            } else {
+                $leftComparable = is_scalar($leftValue) ? (string)$leftValue : '';
+                $rightComparable = is_scalar($rightValue) ? (string)$rightValue : '';
+                $comparison = strcasecmp($leftComparable, $rightComparable);
+            }
+
+            return $sortDir === 'asc' ? $comparison : -$comparison;
+        });
+
+        return $documents;
     }
 }

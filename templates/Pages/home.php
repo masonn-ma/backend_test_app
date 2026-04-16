@@ -36,12 +36,37 @@ $getRoleBadge = function (?string $role): string {
     return sprintf('<span class="badge %s">%s</span>', $roleClass, $label);
 };
 
+// Normalize date values from MongoDB BSON objects or Elasticsearch string payloads.
+$normalizeTimestamp = static function (mixed $value): ?int {
+    if ($value instanceof \MongoDB\BSON\UTCDateTime) {
+        return $value->toDateTime()->getTimestamp();
+    }
+
+    if ($value instanceof \DateTimeInterface) {
+        return $value->getTimestamp();
+    }
+
+    if (is_int($value)) {
+        return $value;
+    }
+
+    if (is_string($value) && $value !== '') {
+        $parsed = strtotime($value);
+
+        return $parsed !== false ? $parsed : null;
+    }
+
+    return null;
+};
+
 // FIX: Proper "time ago" helper instead of hardcoded format string
-$timeAgo = function (?\MongoDB\BSON\UTCDateTime $dt): string {
-    if ($dt === null) {
+$timeAgo = static function (mixed $value) use ($normalizeTimestamp): string {
+    $timestamp = $normalizeTimestamp($value);
+
+    if ($timestamp === null) {
         return '<span class="text-muted">—</span>';
     }
-    $timestamp = $dt->toDateTime()->getTimestamp();
+
     $diff = time() - $timestamp;
 
     if ($diff < 60) {
@@ -55,12 +80,11 @@ $timeAgo = function (?\MongoDB\BSON\UTCDateTime $dt): string {
     } elseif ($diff < 604800) {
         $days = (int)floor($diff / 86400);
         return $days . 'd ago';
-    } else {
-        return $dt->toDateTime()->format('M j, Y');
     }
+
+    return date('M j, Y', $timestamp);
 };
 
-// FIX: Use paginator metadata for total if available, fall back to document count
 $totalRows = $mongoResult['totalCount'] ?? count($mongoResult['documents'] ?? []);
 $currentPage = $mongoResult['page'] ?? 1;
 $perPage = $mongoResult['perPage'] ?? 10;
@@ -71,8 +95,39 @@ $queryParamsBase = ['perPage' => $perPage];
 if (!empty($searchQuery)) {
     $queryParamsBase['q'] = $searchQuery;
 }
+$queryParamsBase['activeOnly'] = !empty($activeOnly) ? '1' : '0';
+if (!empty($sortBy)) {
+    $queryParamsBase['sortBy'] = $sortBy;
+}
+if (!empty($sortDir)) {
+    $queryParamsBase['sortDir'] = $sortDir;
+}
+if (!empty($roleFilter)) {
+    $queryParamsBase['role'] = $roleFilter;
+}
+if (!empty($statusFilter)) {
+    $queryParamsBase['status'] = $statusFilter;
+}
 $pageUrl = static function (int $pageNumber) use ($queryParamsBase): string {
-    return '?' . http_build_query($queryParamsBase + ['page' => $pageNumber]);
+    return '?' . http_build_query(array_merge($queryParamsBase, ['page' => $pageNumber]));
+};
+
+$sortUrl = static function (string $column) use ($queryParamsBase, $sortBy, $sortDir): string {
+    $nextDirection = ($sortBy === $column && $sortDir === 'asc') ? 'desc' : 'asc';
+
+    return '?' . http_build_query(array_merge($queryParamsBase, [
+        'page' => 1,
+        'sortBy' => $column,
+        'sortDir' => $nextDirection,
+    ]));
+};
+
+$sortIcon = static function (string $column) use ($sortBy, $sortDir): string {
+    if ($sortBy !== $column) {
+        return '↕';
+    }
+
+    return $sortDir === 'asc' ? '↑' : '↓';
 };
 ?>
 
@@ -104,32 +159,62 @@ $pageUrl = static function (int $pageNumber) use ($queryParamsBase): string {
     <div class="um-toolbar">
         <div class="um-filters">
             <div class="um-search-wrapper">
-                <svg class="um-search-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5" />
-                    <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                </svg>
-                <input type="text" class="um-input um-search" placeholder="Search users…">
+                <form method="get" action="<?= $this->Url->build(['controller' => 'Home', 'action' => 'search']) ?>" class="um-search-form">
+                    <svg class="um-search-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5" />
+                        <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <input type="hidden" name="page" value="1">
+                    <input type="hidden" name="perPage" value="<?= h((string)$perPage) ?>">
+                    <input type="hidden" name="activeOnly" value="<?= h((string)($activeOnly ? 1 : 0)) ?>">
+                    <input type="hidden" name="role" value="<?= h($roleFilter ?? '') ?>">
+                    <input type="hidden" name="status" value="<?= h($statusFilter ?? '') ?>">
+                    <input type="hidden" name="sortBy" value="<?= h($sortBy ?? '') ?>">
+                    <input type="hidden" name="sortDir" value="<?= h($sortDir ?? '') ?>">
+                    <input type="text" name="q" value="<?= h($searchQuery ?? '') ?>" class="um-input um-search" placeholder="Search users…" aria-label="Search users">
+                </form>
             </div>
-            <select class="um-select">
-                <option value="">All roles</option>
-                <option>Admin</option>
-                <option>Moderator</option>
-                <option>User</option>
-                <option>Guest</option>
-            </select>
-            <select class="um-select">
-                <option value="">All statuses</option>
-                <option>Active</option>
-                <option>Pending</option>
-                <option>Disabled</option>
-                <option>Blocked</option>
-            </select>
-            <select class="um-select">
-                <option value="">Any time</option>
-                <option>Last 7 days</option>
-                <option>Last 30 days</option>
-                <option>Last 90 days</option>
-            </select>
+
+            <form method="get" action="" class="um-filter-form">
+                <input type="hidden" name="page" value="1">
+                <input type="hidden" name="perPage" value="<?= h((string)$perPage) ?>">
+                <input type="hidden" name="activeOnly" value="<?= $activeOnly ? '1' : '0' ?>">
+                <input type="hidden" name="sortBy" value="<?= h($sortBy ?? '') ?>">
+                <input type="hidden" name="sortDir" value="<?= h($sortDir ?? '') ?>">
+                <?php if (!empty($searchQuery)): ?>
+                    <input type="hidden" name="q" value="<?= h($searchQuery) ?>">
+                <?php endif; ?>
+                <select class="um-select" name="role" onchange="this.form.submit()">
+                    <option value="">All roles</option>
+                    <option value="admin" <?= ($roleFilter ?? '') === 'admin' ? 'selected' : '' ?>>Admin</option>
+                    <option value="moderator" <?= ($roleFilter ?? '') === 'moderator' ? 'selected' : '' ?>>Moderator</option>
+                    <option value="user" <?= ($roleFilter ?? '') === 'user' ? 'selected' : '' ?>>User</option>
+                    <option value="guest" <?= ($roleFilter ?? '') === 'guest' ? 'selected' : '' ?>>Guest</option>
+                </select>
+                <select class="um-select" name="status" onchange="this.form.submit()">
+                    <option value="">All statuses</option>
+                    <option value="active" <?= ($statusFilter ?? '') === 'active' ? 'selected' : '' ?>>Active</option>
+                    <option value="pending" <?= ($statusFilter ?? '') === 'pending' ? 'selected' : '' ?>>Pending</option>
+                    <option value="disabled" <?= ($statusFilter ?? '') === 'disabled' ? 'selected' : '' ?>>Disabled</option>
+                    <option value="blocked" <?= ($statusFilter ?? '') === 'blocked' ? 'selected' : '' ?>>Blocked</option>
+                </select>
+            </form>
+
+            <form method="get" action="" class="um-toggle-form">
+                <input type="hidden" name="page" value="1">
+                <input type="hidden" name="perPage" value="<?= h((string)$perPage) ?>">
+                <input type="hidden" name="activeOnly" value="<?= $activeOnly ? '0' : '1' ?>">
+                <input type="hidden" name="role" value="<?= h($roleFilter ?? '') ?>">
+                <input type="hidden" name="status" value="<?= h($statusFilter ?? '') ?>">
+                <input type="hidden" name="sortBy" value="<?= h($sortBy ?? '') ?>">
+                <input type="hidden" name="sortDir" value="<?= h($sortDir ?? '') ?>">
+                <?php if (!empty($searchQuery)): ?>
+                    <input type="hidden" name="q" value="<?= h($searchQuery) ?>">
+                <?php endif; ?>
+                <button type="submit" class="um-btn um-btn-ghost um-btn-toggle <?= $activeOnly ? 'is-active' : '' ?>">
+                    <?= $activeOnly ? 'Active only' : 'All users' ?>
+                </button>
+            </form>
         </div>
         <div class="um-actions">
             <button type="button" class="um-btn um-btn-danger" id="bulk-delete-button" disabled>
@@ -155,13 +240,13 @@ $pageUrl = static function (int $pageNumber) use ($queryParamsBase): string {
                     <th class="col-check">
                         <input type="checkbox" class="um-checkbox select-all">
                     </th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Username</th>
-                    <th>Status</th>
-                    <th>Role</th>
-                    <th>Joined</th>
-                    <th>Last active</th>
+                    <th class="col-name"><a class="um-sort-link" href="<?= $sortUrl('name') ?>">Name <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('name')) ?></span></a></th>
+                    <th class="col-email"><a class="um-sort-link" href="<?= $sortUrl('email') ?>">Email <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('email')) ?></span></a></th>
+                    <th class="col-username"><a class="um-sort-link" href="<?= $sortUrl('username') ?>">Username <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('username')) ?></span></a></th>
+                    <th><a class="um-sort-link" href="<?= $sortUrl('status') ?>">Status <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('status')) ?></span></a></th>
+                    <th><a class="um-sort-link" href="<?= $sortUrl('role') ?>">Role <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('role')) ?></span></a></th>
+                    <th><a class="um-sort-link" href="<?= $sortUrl('joined') ?>">Joined <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('joined')) ?></span></a></th>
+                    <th><a class="um-sort-link" href="<?= $sortUrl('lastActive') ?>">Last active <span class="um-sort-icon" aria-hidden="true"><?= h($sortIcon('lastActive')) ?></span></a></th>
                     <th class="col-actions">Actions</th>
                 </tr>
             </thead>
@@ -192,24 +277,23 @@ $pageUrl = static function (int $pageNumber) use ($queryParamsBase): string {
                         $username   = $doc['username'] ?? 'N/A';
                         $status     = strtolower($doc['status'] ?? 'pending');
                         $role = strtolower((string)($doc['role'] ?? 'guest'));
-                        $joinedDate = isset($doc['createdAt'])
-                            ? $doc['createdAt']->toDateTime()->format('M j, Y')
-                            : '—';
+                        $joinedTimestamp = $normalizeTimestamp($doc['createdAt'] ?? null);
+                        $joinedDate = $joinedTimestamp !== null ? date('M j, Y', $joinedTimestamp) : '—';
                         ?>
                         <tr>
                             <td class="col-check">
                                 <input type="checkbox" class="um-checkbox row-checkbox" value="<?= h($userId) ?>">
                             </td>
-                            <td>
+                            <td class="col-name">
                                 <div class="um-user-cell">
                                     <div class="um-avatar" data-initial="<?= h($initials) ?>">
                                         <?= h($initials) ?>
                                     </div>
-                                    <span class="um-username"><?= h($fullName) ?></span>
+                                    <span class="um-username um-truncate" title="<?= h($fullName) ?>"><?= h($fullName) ?></span>
                                 </div>
                             </td>
-                            <td class="um-muted"><?= h($email) ?></td>
-                            <td class="um-code">@<?= h($username) ?></td>
+                            <td class="um-muted col-email"><span class="um-truncate" title="<?= h((string)$email) ?>"><?= h($email) ?></span></td>
+                            <td class="um-code col-username"><span class="um-truncate" title="@<?= h((string)$username) ?>">@<?= h($username) ?></span></td>
                             <td><?= $getStatusBadge($status) ?></td>
                             <td><?= $getRoleBadge($role) ?></td>
                             <td class="um-muted"><?= h($joinedDate) ?></td>
@@ -253,50 +337,56 @@ $pageUrl = static function (int $pageNumber) use ($queryParamsBase): string {
         </table>
     </div>
 
-    <!-- Pagination -->
-    <!-- FIX: Use real pagination data instead of hardcoded values -->
-    <div class="um-footer">
-        <div class="um-rows-info">
-            <form method="get" action="" class="um-rows-form">
-                <?php if (!empty($searchQuery)): ?>
-                    <input type="hidden" name="q" value="<?= h($searchQuery) ?>">
+    <?php if (empty($searchQuery)): ?>
+        <!-- Pagination -->
+        <div class="um-footer">
+            <div class="um-rows-info">
+                <form method="get" action="" class="um-rows-form">
+                    <input type="hidden" name="page" value="1">
+                    <input type="hidden" name="activeOnly" value="<?= $activeOnly ? '1' : '0' ?>">
+                    <input type="hidden" name="role" value="<?= h($roleFilter ?? '') ?>">
+                    <input type="hidden" name="status" value="<?= h($statusFilter ?? '') ?>">
+                    <input type="hidden" name="sortBy" value="<?= h($sortBy ?? '') ?>">
+                    <input type="hidden" name="sortDir" value="<?= h($sortDir ?? '') ?>">
+                    <?php if (!empty($searchQuery)): ?>
+                        <input type="hidden" name="q" value="<?= h($searchQuery) ?>">
+                    <?php endif; ?>
+                    Rows per page:
+                    <select class="um-select um-select-sm" name="perPage" onchange="this.form.submit()">
+                        <option value="10" <?= $perPage === 10 ? 'selected' : '' ?>>10</option>
+                        <option value="25" <?= $perPage === 25 ? 'selected' : '' ?>>25</option>
+                        <option value="50" <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
+                    </select>
+                </form>
+                <span class="um-muted">
+                    <?= $startRow ?>–<?= $endRow ?> of <?= $totalRows ?>
+                </span>
+            </div>
+            <nav class="um-pagination" aria-label="Page navigation">
+                <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(1) ?>" aria-label="First page">«</a>
+                <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(max(1, $currentPage - 1)) ?>" aria-label="Previous page">‹</a>
+
+                <?php
+                $window = 2;
+                $start = max(1, $currentPage - $window);
+                $end = min($totalPages, $currentPage + $window);
+                if ($start > 1): ?>
+                    <a class="um-page-btn" href="<?= $pageUrl(1) ?>">1</a>
+                    <?php if ($start > 2): ?><span class="um-page-ellipsis">…</span><?php endif; ?>
                 <?php endif; ?>
-                <input type="hidden" name="page" value="1">
-                Rows per page:
-                <select class="um-select um-select-sm" name="perPage" onchange="this.form.submit()">
-                    <option value="10" <?= $perPage === 10 ? 'selected' : '' ?>>10</option>
-                    <option value="25" <?= $perPage === 25 ? 'selected' : '' ?>>25</option>
-                    <option value="50" <?= $perPage === 50 ? 'selected' : '' ?>>50</option>
-                </select>
-            </form>
-            <span class="um-muted">
-                <?= $startRow ?>–<?= $endRow ?> of <?= $totalRows ?>
-            </span>
+
+                <?php for ($p = $start; $p <= $end; $p++): ?>
+                    <a class="um-page-btn <?= $p === $currentPage ? 'active' : '' ?>" href="<?= $pageUrl($p) ?>"><?= $p ?></a>
+                <?php endfor; ?>
+
+                <?php if ($end < $totalPages): ?>
+                    <?php if ($end < $totalPages - 1): ?><span class="um-page-ellipsis">…</span><?php endif; ?>
+                    <a class="um-page-btn" href="<?= $pageUrl($totalPages) ?>"><?= $totalPages ?></a>
+                <?php endif; ?>
+
+                <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl(min($totalPages, $currentPage + 1)) ?>" aria-label="Next page">›</a>
+                <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl($totalPages) ?>" aria-label="Last page">»</a>
+            </nav>
         </div>
-        <nav class="um-pagination" aria-label="Page navigation">
-            <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(1) ?>" aria-label="First page">«</a>
-            <a class="um-page-btn <?= $currentPage <= 1 ? 'disabled' : '' ?>" href="<?= $pageUrl(max(1, $currentPage - 1)) ?>" aria-label="Previous page">‹</a>
-
-            <?php
-            $window = 2;
-            $start = max(1, $currentPage - $window);
-            $end = min($totalPages, $currentPage + $window);
-            if ($start > 1): ?>
-                <a class="um-page-btn" href="<?= $pageUrl(1) ?>">1</a>
-                <?php if ($start > 2): ?><span class="um-page-ellipsis">…</span><?php endif; ?>
-            <?php endif; ?>
-
-            <?php for ($p = $start; $p <= $end; $p++): ?>
-                <a class="um-page-btn <?= $p === $currentPage ? 'active' : '' ?>" href="<?= $pageUrl($p) ?>"><?= $p ?></a>
-            <?php endfor; ?>
-
-            <?php if ($end < $totalPages): ?>
-                <?php if ($end < $totalPages - 1): ?><span class="um-page-ellipsis">…</span><?php endif; ?>
-                <a class="um-page-btn" href="<?= $pageUrl($totalPages) ?>"><?= $totalPages ?></a>
-            <?php endif; ?>
-
-            <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl(min($totalPages, $currentPage + 1)) ?>" aria-label="Next page">›</a>
-            <a class="um-page-btn <?= $currentPage >= $totalPages ? 'disabled' : '' ?>" href="<?= $pageUrl($totalPages) ?>" aria-label="Last page">»</a>
-        </nav>
-    </div>
+    <?php endif; ?>
 </div>

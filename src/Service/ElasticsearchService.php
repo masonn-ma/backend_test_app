@@ -70,19 +70,41 @@ class ElasticsearchService
         }
     }
 
-    public function search(string $query): array
+    public function search(string $query, string $role = '', string $status = ''): array
     {
+        $query = trim($query);
+        $role = strtolower(trim($role));
+        $status = strtolower(trim($status));
+
         if ($query === '') {
             return [];
+        }
+
+        $filters = [];
+
+        if ($role !== '') {
+            $filters[] = ['term' => ['role' => $role]];
+        }
+
+        if ($status !== '') {
+            $filters[] = ['term' => ['status' => $status]];
         }
 
         $params = [
             'index' => $this->indexName,
             'body' => [
                 'query' => [
-                    'simple_query_string' => [
-                        'query' => $query,
-                        'default_operator' => 'and',
+                    'bool' => [
+                        'must' => [
+                            [
+                                'simple_query_string' => [
+                                    'query' => $query,
+                                    'default_operator' => 'and',
+                                    'fields' => ['*'],
+                                ],
+                            ],
+                        ],
+                        'filter' => $filters,
                     ],
                 ],
                 'size' => 25,

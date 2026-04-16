@@ -32,10 +32,10 @@ class MongoService
         return $this->collectionName;
     }
 
-    public function getConfiguredCollectionDocuments(): array
+    public function getConfiguredCollectionDocuments(bool $activeOnly = true, string $role = '', string $status = ''): array
     {
         $collection = $this->collection();
-        $filter = $this->buildReadFilter($this->collectionName);
+        $filter = $this->buildReadFilter($this->collectionName, $activeOnly, $role, $status);
 
         return $collection->find($filter)->toArray();
     }
@@ -45,21 +45,33 @@ class MongoService
      *
      * @return array{documents: array<mixed>, totalCount: int, page: int, perPage: int}
      */
-    public function getConfiguredCollectionPage(int $page, int $perPage): array
-    {
+    public function getConfiguredCollectionPage(
+        int $page,
+        int $perPage,
+        bool $activeOnly = true,
+        string $role = '',
+        string $status = '',
+        string $sortBy = '',
+        string $sortDir = ''
+    ): array {
         $page = max(1, $page);
         $perPage = max(1, $perPage);
         $skip = ($page - 1) * $perPage;
         $collection = $this->collection();
-        $filter = $this->buildReadFilter($this->collectionName);
+        $filter = $this->buildReadFilter($this->collectionName, $activeOnly, $role, $status);
+        $sortField = $this->resolveSortField($sortBy);
+        $sortDirection = strtolower($sortDir) === 'asc' ? 1 : -1;
 
-        $documents = $collection
-            ->find($filter, [
-                'sort' => ['createdAt' => -1, '_id' => -1],
-                'skip' => $skip,
-                'limit' => $perPage,
-            ])
-            ->toArray();
+        $findOptions = [
+            'skip' => $skip,
+            'limit' => $perPage,
+        ];
+
+        if ($sortField !== null && ($sortDir === 'asc' || $sortDir === 'desc')) {
+            $findOptions['sort'] = [$sortField => $sortDirection, '_id' => -1];
+        }
+
+        $documents = $collection->find($filter, $findOptions)->toArray();
 
         $totalCount = (int)$collection->countDocuments($filter);
 
@@ -74,7 +86,64 @@ class MongoService
     /* ---------------- USER ACTIONS ---------------- */
     public function newUser(array $userData): string
     {
-        $result = $this->collection('users')->insertOne($userData);
+        $password = (string)($userData['password'] ?? '');
+        if ($password === '') {
+            throw new \InvalidArgumentException('Password is required to create a user.');
+        }
+
+        $role = strtolower(trim((string)($userData['role'] ?? 'user')));
+        $status = strtolower(trim((string)($userData['status'] ?? 'active')));
+        $permissions = $this->permissionsForRole($role);
+        $now = new \MongoDB\BSON\UTCDateTime();
+        $defaultDob = new \MongoDB\BSON\UTCDateTime((int)(strtotime('2000-01-01T00:00:00Z') * 1000));
+
+        $newUserData = [
+            'username' => $userData['username'] ?? null,
+            'email' => $userData['email'] ?? null,
+            'passwordHash' => password_hash($password, PASSWORD_DEFAULT),
+            'firstName' => $userData['firstName'] ?? null,
+            'lastName' => $userData['lastName'] ?? null,
+            'fullName' => trim(($userData['firstName'] ?? '') . ' ' . ($userData['lastName'] ?? '')),
+            'age' => 18,
+            'dateOfBirth' => $defaultDob,
+            'gender' => 'prefer not to say',
+            'phoneNumber' => '+10000000000',
+            'address' => [
+                'street' => 'Unknown',
+                'city' => 'Unknown',
+                'state' => 'Unknown',
+                'postalCode' => '00000',
+                'country' => 'Unknown',
+            ],
+            'profilePicture' => '',
+            'bio' => '',
+            'role' => $role,
+            'status' => $status,
+            'permissions' => $permissions,
+            'isActive' => $userData['isActive'] ?? true,
+            'isEmailVerified' => false,
+            'isPhoneVerified' => false,
+            'lastLogin' => $now,
+            'loginCount' => 0,
+            'createdAt' => $now,
+            'updatedAt' => $now,
+            'socialLogin' => [
+                'google' => null,
+                'facebook' => null,
+                'twitter' => null,
+            ],
+            'preferences' => [
+                'language' => 'en',
+                'theme' => 'system',
+                'notifications' => [
+                    'email' => true,
+                    'push' => true,
+                    'sms' => false,
+                ],
+            ],
+            'twoFactorEnabled' => false,
+        ];
+        $result = $this->collection('users')->insertOne($newUserData);
         return (string)$result->getInsertedId();
     }
 
@@ -87,6 +156,57 @@ class MongoService
         );
         return $result->getModifiedCount() > 0;
     }
+
+    public function updateUserByUsername(string $originalUsername, array $updateData): bool
+    {
+        $updateResult = $this->collection('users')->updateOne(
+            ['username' => $originalUsername],
+            [
+                '$set' => [
+                    ...$updateData,
+                    'updatedAt' => new \MongoDB\BSON\UTCDateTime(),
+                ],
+            ]
+        );
+
+        return $updateResult->getMatchedCount() > 0;
+    }
+
+    public function updateUserProfileByUsername(
+        string $originalUsername,
+        string $username,
+        string $email,
+        string $firstName,
+        string $lastName,
+        string $role,
+        string $status
+    ): bool {
+        $normalizedRole = strtolower(trim($role));
+        $normalizedStatus = strtolower(trim($status));
+
+        return $this->updateUserByUsername($originalUsername, [
+            'username' => $username,
+            'email' => $email,
+            'firstName' => $firstName,
+            'lastName' => $lastName,
+            'fullName' => trim($firstName . ' ' . $lastName),
+            'role' => $normalizedRole,
+            'permissions' => $this->permissionsForRole($normalizedRole),
+            'status' => $normalizedStatus,
+        ]);
+    }
+
+    public function findUserByUsername(string $username): ?array
+    {
+        $user = $this->collection('users')->findOne(
+            ['username' => $username],
+            ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']]
+        );
+
+        return is_array($user) ? $user : null;
+    }
+
+    /* -------------------------------------------- */
 
     /**
      * Get the audit collection (logs/activities).
@@ -118,17 +238,61 @@ class MongoService
      *
      * @return array<string, mixed>
      */
-    private function buildReadFilter(string $collectionName): array
+    private function buildReadFilter(string $collectionName, bool $activeOnly = true, string $role = '', string $status = ''): array
     {
         if ($collectionName !== 'users') {
             return [];
         }
 
-        return [
-            '$or' => [
-                ['isActive' => ['$exists' => false]],
-                ['isActive' => ['$ne' => false]],
-            ],
+        $role = strtolower(trim($role));
+        $status = strtolower(trim($status));
+
+        $filter = [];
+
+        if (!$activeOnly) {
+            $filter = [];
+        } else {
+            $filter['isActive'] = true;
+        }
+
+        if ($role !== '') {
+            $filter['role'] = $role;
+        }
+
+        if ($status !== '') {
+            $filter['status'] = $status;
+        }
+
+        return $filter;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function permissionsForRole(string $role): array
+    {
+        $permissionsByRole = [
+            'admin' => ['read', 'write', 'moderate', 'delete', 'admin'],
+            'moderator' => ['read', 'write', 'moderate'],
+            'user' => ['read', 'write'],
+            'guest' => ['read'],
         ];
+
+        return $permissionsByRole[$role] ?? ['read'];
+    }
+
+    private function resolveSortField(string $sortBy): ?string
+    {
+        $mapping = [
+            'name' => 'fullName',
+            'email' => 'email',
+            'username' => 'username',
+            'status' => 'status',
+            'role' => 'role',
+            'joined' => 'createdAt',
+            'lastActive' => 'lastLogin',
+        ];
+
+        return $mapping[$sortBy] ?? null;
     }
 }
